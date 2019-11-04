@@ -26,7 +26,8 @@
 
 local json = require("cjson")
 
-if (gui_enabled()) then 
+--if (gui_enabled()) then
+if (true) then
 	local suri_proto = Proto("suricata", "Suricata Analysis")
 	local suri_gid = ProtoField.string("suricata.alert.gid", "GID", FT_INTEGER)
 	local suri_sid = ProtoField.string("suricata.alert.sid", "SID", FT_INTEGER)
@@ -45,8 +46,6 @@ if (gui_enabled()) then
 	local suri_fileinfo_filename = ProtoField.string("suricata.fileinfo.filename", "Fileinfo filename", FT_STRING)
 	local suri_fileinfo_magic = ProtoField.string("suricata.fileinfo.magic", "Fileinfo magic", FT_STRING)
 	local suri_fileinfo_md5 = ProtoField.string("suricata.fileinfo.md5", "Fileinfo md5", FT_STRING)
-	local suri_fileinfo_sha1 = ProtoField.string("suricata.fileinfo.sha1", "Fileinfo sha1", FT_STRING)
-	local suri_fileinfo_sha256 = ProtoField.string("suricata.fileinfo.sha256", "Fileinfo sha256", FT_STRING)
 	local suri_fileinfo_size = ProtoField.string("suricata.fileinfo.size", "Fileinfo size", FT_INTEGER)
 	local suri_fileinfo_stored = ProtoField.string("suricata.fileinfo.stored", "Fileinfo stored", FT_STRING)
 
@@ -58,12 +57,6 @@ if (gui_enabled()) then
 	local suri_http_protocol = ProtoField.string("suricata.http.protocol", "HTTP Protocol", FT_STRING)
 	local suri_http_status = ProtoField.string("suricata.http.status", "HTTP Status", FT_STRING)
 	local suri_http_length = ProtoField.string("suricata.http.length", "HTTP Length", FT_STRING)
-	local suri_http_referer = ProtoField.string("suricata.http.referer", "HTTP Referer", FT_STRING)
-
-	local suri_smb_command = ProtoField.string("suricata.smb.command", "SMB Command", FT_STRING)
-	local suri_smb_filename = ProtoField.string("suricata.smb.filename", "SMB Filename", FT_STRING)
-	local suri_smb_share = ProtoField.string("suricata.smb.share", "SMB Share", FT_STRING)
-	local suri_smb_status = ProtoField.string("suricata.smb.status", "SMB Status", FT_STRING)
 
 	local suri_prefs = suri_proto.prefs
 	local suri_running = false
@@ -81,11 +74,9 @@ if (gui_enabled()) then
 	--				       .. " file in the directory of the pcap file")
 	suri_proto.fields = {suri_gid, suri_sid, suri_rev, suri_msg, suri_tls_subject, suri_tls_issuerdn, suri_tls_fingerprint, suri_tls_version,
 				suri_ssh_client_version, suri_ssh_client_proto, suri_ssh_server_version, suri_ssh_server_proto,
-				suri_fileinfo_filename, suri_fileinfo_magic, suri_fileinfo_md5, suri_fileinfo_sha1, suri_fileinfo_sha256,
-				suri_fileinfo_size, suri_fileinfo_stored, 
+				suri_fileinfo_filename, suri_fileinfo_magic, suri_fileinfo_md5, suri_fileinfo_size, suri_fileinfo_stored,
 				suri_http_url, suri_http_hostname, suri_http_user_agent,
-				suri_http_content_type, suri_http_method, suri_http_protocol, suri_http_status, suri_http_length, suri_http_referer,
-				suri_smb_command, suri_smb_filename, suri_smb_share, suri_smb_status
+				suri_http_content_type, suri_http_method, suri_http_protocol, suri_http_status, suri_http_length
 				}
 
 
@@ -121,22 +112,12 @@ if (gui_enabled()) then
 					subtree = tree:add(suri_proto, "Suricata File Info")
 					-- add protocol fields to subtree
 					subtree:add(suri_fileinfo_filename, val['fileinfo_filename'])
-					if val['fileinfo_magic'] then
-						subtree:add(suri_fileinfo_magic, val['fileinfo_magic'])
-					end
+					subtree:add(suri_fileinfo_magic, val['fileinfo_magic'])
 					if val['fileinfo_md5'] then
 						subtree:add(suri_fileinfo_md5, val['fileinfo_md5'])
 					end
-					if val['fileinfo_sha1'] then
-						subtree:add(suri_fileinfo_sha1, val['fileinfo_sha1'])
-					end
-					if val['fileinfo_sha256'] then
-						subtree:add(suri_fileinfo_sha256, val['fileinfo_sha256'])
-					end
 					subtree:add(suri_fileinfo_size, val['fileinfo_size'])
-					if val['fileinfo_stored'] then
-						subtree:add(suri_fileinfo_stored, val['fileinfo_stored'])
-					end
+					subtree:add(suri_fileinfo_stored, val['fileinfo_stored'])
 				end
 				if val['http_url'] then
 					subtree = tree:add(suri_proto, "Suricata HTTP Info")
@@ -161,109 +142,78 @@ if (gui_enabled()) then
 					if val['http_length'] then
 						subtree:add(suri_http_length, val['http_length'])
 					end
-					if val['http_referer'] then
-						subtree:add(suri_http_referer, val['http_referer'])
-					end
-				end
-				if val['smb_command'] then
-					subtree = tree:add(suri_proto, "Suricata SMB Info")
-					subtree:add(suri_smb_command, val['smb_command'])
-					if val['smb_filename'] then
-						subtree:add(suri_smb_filename, val['smb_filename'])
-					end
-					if val['smb_share'] then
-						subtree:add(suri_smb_share, val['smb_share'])
-					end
-					if val['smb_status'] then
-						subtree:add(suri_smb_status, val['smb_status'])
-					end
 				end
 		     end
 	     end
 	end
-
-	function suri_proto.init()
-	end
-
-	-- register our protocol as a postdissector
-	function suriwire_activate(eve_file)
-		function suriwire_parser(file)
-			local event
-			local id = 0
-			local s_text = ""
-			suri_alerts = {}
-			for s_text in io.lines(file) do
-				event = json.decode(s_text)
-				id = event["pcap_cnt"]
-				if not (id == nil) then
-					if event["event_type"] == "alert" then
-						if suri_alerts[id] == nil then
-							suri_alerts[id] = {}
-						end
-						table.insert(suri_alerts[id],
-							{gid = tonumber(event["alert"]["gid"]), sid = tonumber(event["alert"]["signature_id"]),
-							rev = tonumber(event["alert"]["rev"]), msg = event["alert"]["signature"]})
-					elseif event["event_type"] == "tls" then
-						if suri_alerts[id] == nil then
-							suri_alerts[id] = {}
-						end
-						table.insert(suri_alerts[id],
-							{ tls_subject = event["tls"]["subject"], tls_issuerdn = event["tls"]["issuerdn"],
-							tls_fingerprint = event["tls"]["fingerprint"], tls_version = event["tls"]["version"]})
-					elseif event["event_type"] == "ssh" then
-						if suri_alerts[id] == nil then
-							suri_alerts[id] = {}
-						end
-						table.insert(suri_alerts[id],
-							{ ssh_client_version = event["ssh"]["client"]["software_version"],
-							ssh_client_proto = event["ssh"]["client"]["proto_version"],
-							ssh_server_version = event["ssh"]["server"]["software_version"],
-							ssh_server_proto = event["ssh"]["server"]["proto_version"],
-							})
-					elseif event["event_type"] == "fileinfo" then
-						if suri_alerts[id] == nil then
-							suri_alerts[id] = {}
-						end
-						table.insert(suri_alerts[id],
-							{ fileinfo_filename = event["fileinfo"]["filename"],
-							  fileinfo_magic = event["fileinfo"]["magic"],
-							  fileinfo_md5 = event["fileinfo"]["md5"],
-							  fileinfo_sha1 = event["fileinfo"]["sha1"],
-							  fileinfo_sha256 = event["fileinfo"]["sha256"],
-							  fileinfo_size = tonumber(event["fileinfo"]["size"]),
-							  fileinfo_stored = tostring(event["fileinfo"]["stored"]),
-							})
-					elseif event["event_type"] == "http" then
-						if suri_alerts[id] == nil then
-							suri_alerts[id] = {}
-						end
-						table.insert(suri_alerts[id],
-							{
-								http_url = event["http"]["url"],
-								http_hostname = event["http"]["hostname"],
-								http_user_agent = event["http"]["http_user_agent"],
-								http_content_type = event["http"]["http_content_type"],
-								http_method = event["http"]["http_method"],
-								http_protocol = event["http"]["protocol"],
-								http_status = event["http"]["status"],
-								http_length = event["http"]["length"],
-								http_referer = event["http"]["http_refer"]
-							})
-					elseif event["event_type"] == "smb" then
-						if suri_alerts[id] == nil then
-							suri_alerts[id] = {}
-						end
-						table.insert(suri_alerts[id],
-							{
-								smb_command = event["smb"]["command"],
-								smb_filename = event["smb"]["filename"],
-								smb_share = event["smb"]["share"],
-								smb_status = event["smb"]["status"],
-							})
+	function suriwire_parser(file)
+		local event
+		local id = 0
+		local s_text = ""
+		suri_alerts = {}
+		for s_text in io.lines(file) do
+			event = json.decode(s_text)
+			id = event["pcap_cnt"]
+			if not (id == nil) then
+				if event["event_type"] == "alert" then
+					if suri_alerts[id] == nil then
+						suri_alerts[id] = {}
 					end
+					table.insert(suri_alerts[id],
+						{gid = tonumber(event["alert"]["gid"]), sid = tonumber(event["alert"]["signature_id"]),
+						rev = tonumber(event["alert"]["rev"]), msg = event["alert"]["signature"]})
+				elseif event["event_type"] == "tls" then
+					if suri_alerts[id] == nil then
+						suri_alerts[id] = {}
+					end
+					table.insert(suri_alerts[id],
+						{ tls_subject = event["tls"]["subject"], tls_issuerdn = event["tls"]["issuerdn"],
+						tls_fingerprint = event["tls"]["fingerprint"], tls_version = event["tls"]["version"]})
+				elseif event["event_type"] == "ssh" then
+					if suri_alerts[id] == nil then
+						suri_alerts[id] = {}
+					end
+					table.insert(suri_alerts[id],
+						{ ssh_client_version = event["ssh"]["client"]["software_version"],
+						ssh_client_proto = event["ssh"]["client"]["proto_version"],
+						ssh_server_version = event["ssh"]["server"]["software_version"],
+						ssh_server_proto = event["ssh"]["server"]["proto_version"],
+						})
+				elseif event["event_type"] == "fileinfo" then
+					if suri_alerts[id] == nil then
+						suri_alerts[id] = {}
+					end
+					table.insert(suri_alerts[id],
+						{ fileinfo_filename = event["fileinfo"]["filename"],
+						  fileinfo_magic = event["fileinfo"]["magic"],
+						  fileinfo_md5 = event["fileinfo"]["md5"],
+						  fileinfo_size = tonumber(event["fileinfo"]["size"]),
+						  fileinfo_stored = tostring(event["fileinfo"]["stored"]),
+						  http_url = event["http"]["url"],
+						  http_hostname = event["http"]["hostname"],
+						  http_user_agent = event["http"]["http_user_agent"],
+						})
+				elseif event["event_type"] == "http" then
+					if suri_alerts[id] == nil then
+						suri_alerts[id] = {}
+					end
+					table.insert(suri_alerts[id],
+						{
+							http_url = event["http"]["url"],
+							http_hostname = event["http"]["hostname"],
+							http_user_agent = event["http"]["http_user_agent"],
+							http_content_type = event["http"]["http_content_type"],
+							http_method = event["http"]["http_method"],
+							http_protocol = event["http"]["protocol"],
+							http_status = event["http"]["status"],
+							http_length = event["http"]["length"],
+						})
 				end
 			end
 		end
+	end
+	-- register our protocol as a postdissector
+	function suriwire_activate()
 
 		-- function suriwire_run()
 		-- 	local file = "myfile.pcap"
@@ -306,7 +256,7 @@ if (gui_enabled()) then
 					register_postdissector(suri_proto)
 					suri_running = true
 				end
-				reload()
+				reload_packets()
 			else
 				new_dialog("Unable to open '" .. file
 					   .. "'. Choose another alert file",
@@ -316,25 +266,32 @@ if (gui_enabled()) then
 		end
 		-- run suricata
 		-- set input file
-		if eve_file then
-			suriwire_register(eve_file)
-		else
-			new_dialog("Choose alert file",
-			           suriwire_register,
-			           "Choose file (default:" .. suri_prefs.alert_file..")")
-		end
+		new_dialog("Choose alert file",
+			   suriwire_register,
+			   "Choose file (default:" .. suri_prefs.alert_file..")")
+		-- debug 1.7
+		-- suriwire_register("sample.log")
 	end
 
 	function suriwire_page()
 		browser_open_url("http://home.regit.org/software/suriwire")
 	end
 
+	function suri_proto.init()
+		local filehandle = io.open(suri_prefs.alert_file, "r")
+		if not (filehandle == nil) then
+			filehandle:close()
+			suriwire_parser(suri_prefs.alert_file)
+			if suri_running == false then
+				register_postdissector(suri_proto)
+				suri_running = true
+			end
+		end
+	end
+
 	register_menu("Suricata/Activate", suriwire_activate, MENU_TOOLS_UNSORTED)
 	-- register_menu("Suricata/Run Suricata", suriwire_run, MENU_TOOLS_UNSORTED)
 	register_menu("Suricata/Web", suriwire_page, MENU_TOOLS_UNSORTED)
-	-- activate on startup if SURIWIRE_EVE_FILE env variable is set
-	local eve_file = os.getenv("SURIWIRE_EVE_FILE")
-	if eve_file then
-		suriwire_activate(eve_file)
-	end
+	-- debug 1.7
+	-- suriwire_activate()
 end
